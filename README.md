@@ -68,3 +68,5 @@ The realtime counter:
 Technical Details
 -----------------
 GPL v3, compatible with Qt4/Qt5, built on Windows and Linux.
+
+The project can be build using 'qmake && make' or if you open it in QtCreator.
