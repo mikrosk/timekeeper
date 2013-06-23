@@ -37,22 +37,29 @@ will be recalculated.
 Description
 -----------
 Work Day:	Derived from Clock In Time.
+
 Clock In Time:	Time when the app has started.
+
 Clock In Delay:	Number of minutes which have passed from entering the
 		building to Clock In Time. Default = 2.
+
 Clock Out Time:	Time when the app has finished. Only for completed work
 		days.
+
 Clock Out Delay:Number of minutes which (will) have passed from shutting
 		down the computer (Clock Out Time) to exiting the building.
 		Default = 1.
+
 Recommended clock out time for today:
 		The first value means the time when you can shut down your
 		computer (i.e.  it takes the delays into account), the
 		second value means the same minus this week's overtime.
+
 This week's overtime:
 		Difference between the expected every day's performance (8.5
 		hours) and your actual performance.  Can be negative (you
 		miss some time) or positive (you've got overtime).
+
 The realtime counter:
 		It shows you how much time is still left ;-) Essentially the
 		same as the second recommended clock out time value minus
@@ -61,11 +68,3 @@ The realtime counter:
 Technical Details
 -----------------
 GPL v3, compatible with Qt4/Qt5, built on Windows and Linux.
-
-Contact
--------
-If you'd like to see a new feature or better documentation, drop me a line.
-Right now I'm the only user so I don't care that much.
-
-Miro Kropacek
-miro.kropacek@gmail.com
