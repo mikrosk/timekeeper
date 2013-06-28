@@ -34,9 +34,11 @@ static QDataStream& operator>>( QDataStream& stream, WorkTime& work )
 }
 
 TimeKeeper::TimeKeeper(QWidget *parent)
-	: QDialog(parent)
+    : QDialog(parent, Qt::Window )
 {
 	ui.setupUi(this);
+
+    setWindowFlags( ( windowFlags() | Qt::CustomizeWindowHint ) & ~Qt::WindowMaximizeButtonHint );
 
 	// we expect there's always something
     QString dataPath = appDataPath();
