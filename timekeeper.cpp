@@ -95,7 +95,7 @@ TimeKeeper::TimeKeeper(QWidget *parent)
 	m_times.append( time );
 #endif
 
-	if( m_times.count() == 0 || m_times.last().clockInTime.date().day() < now.date().day() )
+	if( m_times.count() == 0 || m_times.last().clockInTime.date() < now.date() )
 	{
 		//QMessageBox::information( 0, QApplication::applicationName(), "Your clock in time is " + now.toLocalTime().toString( Qt::SystemLocaleShortDate ) );
 		WorkTime time;
