@@ -19,6 +19,7 @@ static QDataStream& operator<<( QDataStream& stream, const WorkTime& work )
 	stream << work.clockInDelay;
 	stream << work.clockOutTime;
 	stream << work.clockOutDelay;
+    stream << work.pausedSecs;
 
 	return stream;
 }
@@ -29,12 +30,14 @@ static QDataStream& operator>>( QDataStream& stream, WorkTime& work )
 	stream >> work.clockInDelay;
 	stream >> work.clockOutTime;
 	stream >> work.clockOutDelay;
+    stream >> work.pausedSecs;
 
 	return stream;
 }
 
 TimeKeeper::TimeKeeper(QWidget *parent)
     : QDialog(parent, Qt::Window )
+    , m_paused(false)
 {
 	ui.setupUi(this);
 
@@ -49,6 +52,7 @@ TimeKeeper::TimeKeeper(QWidget *parent)
 	QDataStream stream( &file );
     if( file.open( QFile::ReadOnly ) )
 	{
+        stream >> m_paused;
 		stream >> m_times;
 		file.close();
 	}
@@ -59,6 +63,7 @@ TimeKeeper::TimeKeeper(QWidget *parent)
 	{
 		// new week, clear stats
 		m_times.clear();
+        m_paused = false;
 	}
 
 #if 0
@@ -95,6 +100,10 @@ TimeKeeper::TimeKeeper(QWidget *parent)
 	m_times.append( time );
 #endif
 
+    if (m_paused) {
+        m_pausedTime = m_times.last().clockOutTime;
+    }
+
 	if( m_times.count() == 0 || m_times.last().clockInTime.date() < now.date() )
 	{
 		//QMessageBox::information( 0, QApplication::applicationName(), "Your clock in time is " + now.toLocalTime().toString( Qt::SystemLocaleShortDate ) );
@@ -108,7 +117,10 @@ TimeKeeper::TimeKeeper(QWidget *parent)
 		m_times.last().clockOutTime = QDateTime();
 	}
 
-	m_leaveTime = m_times.last().clockInTime.addSecs( 8 * 60 * 60 + 30 * 60 );
+    m_leaveTime = m_times.last().clockInTime
+            .addSecs( 8 * 60 * 60 + 30 * 60 )
+            .addSecs(m_times.last().pausedSecs)
+            .addSecs(m_paused ? m_pausedTime.secsTo(now) : 0);
 	connect( &m_timer, SIGNAL( timeout() ), this, SLOT( updateTimeLeft() ) );
 	m_timer.setInterval( 500 );
 	m_timer.start();
@@ -119,12 +131,13 @@ TimeKeeper::TimeKeeper(QWidget *parent)
 
 	updateWeekOvertime();
 
-	QStandardItemModel* model = new QStandardItemModel( 0, 5, this );
+    QStandardItemModel* model = new QStandardItemModel( 0, 6, this );
 	model->setHorizontalHeaderItem( 0, new QStandardItem( QString( "Work Day" ) ) );
 	model->setHorizontalHeaderItem( 1, new QStandardItem( QString( "Clock In Time" ) ) );
 	model->setHorizontalHeaderItem( 2, new QStandardItem( QString( "Clock In Delay" ) ) );
 	model->setHorizontalHeaderItem( 3, new QStandardItem( QString( "Clock Out Time" ) ) );
 	model->setHorizontalHeaderItem( 4, new QStandardItem( QString( "Clock Out Delay" ) ) );
+    model->setHorizontalHeaderItem( 5, new QStandardItem( QString( "Paused secs" ) ) );
 
 	foreach( WorkTime time, m_times )
 	{
@@ -144,10 +157,19 @@ TimeKeeper::TimeKeeper(QWidget *parent)
 			items.append( new QStandardItem() );
 		}
 		items.append( new QStandardItem( QString( "%1" ).arg( time.clockOutDelay ) ) );
+        items.append( new QStandardItem( QString( "%1" ).arg( time.pausedSecs ) ) );
+        items.last()->setEditable( false );
 		model->appendRow( items );
 	}
 
     connect( model, SIGNAL( itemChanged( QStandardItem* ) ), this, SLOT( updateEverything( QStandardItem* ) ) );
+
+    if (m_paused) {
+        ui.buttonPause->setText( "Unpause" );
+    } else {
+        ui.buttonPause->setText( "Pause" );
+    }
+    connect(ui.buttonPause, SIGNAL(clicked()), this, SLOT(togglePause()));
 
 	ui.tableView->setModel( model );
 #if QT_VERSION >= 0x050000
@@ -176,6 +198,7 @@ QDateTime TimeKeeper::leaveTimeWithDelays() const
 	uint secs = m_leaveTime.toTime_t();
 	secs -= m_times.last().clockInDelay * 60;
 	secs -= m_times.last().clockOutDelay * 60;
+    // m_leaveTime includes m_times.last().pausedSecs
 	
 	return QDateTime::fromTime_t( secs );
 }
@@ -187,6 +210,7 @@ QDateTime TimeKeeper::leaveTimeWithOvertime() const
 	// these are not considered in week overtime!
 	secs -= m_times.last().clockInDelay * 60;
 	secs -= m_times.last().clockOutDelay * 60;
+    // m_leaveTime includes m_times.last().pausedSecs
 	
 	return QDateTime::fromTime_t( secs );
 }
@@ -201,6 +225,7 @@ qint64 TimeKeeper::weekOvertime() const
 			secs += time.clockInTime.secsTo( time.clockOutTime );
 			secs += time.clockInDelay * 60;
 			secs += time.clockOutDelay * 60;
+            secs -= time.pausedSecs;
 		}
 	}
 
@@ -240,10 +265,16 @@ void TimeKeeper::storeTimes()
     QFile file( QDir( dataPath ).filePath( "timekeeper.db" ) );
 	QDataStream stream( &file );
 	
-	m_times.last().clockOutTime = QDateTime::currentDateTime();
     if( file.open( QFile::WriteOnly ) )
-	{
+    {
+        stream << m_paused;
+        if (m_paused) {
+            togglePause();
+        }
+
+        m_times.last().clockOutTime = QDateTime::currentDateTime();
 		stream << m_times;
+
 		file.close();
 	}
 }
@@ -258,6 +289,8 @@ void TimeKeeper::updateEverything( QStandardItem* item )
     case 4:
         m_times[item->row()].clockOutDelay = item->text().toInt();
         break;
+    case 5:
+        break;
     default:
         QMessageBox::warning( this, QApplication::applicationName(), "Illegal column");
     }
@@ -266,6 +299,35 @@ void TimeKeeper::updateEverything( QStandardItem* item )
     setBlackAndBoldText( ui.labelLeaveTimeWithOvertime, leaveTimeWithOvertime().time().toString( "(hh:mm AP)" ) );
 
     updateWeekOvertime();
+}
+
+void TimeKeeper::togglePause()
+{
+    m_paused = !m_paused;
+
+    QDateTime now = QDateTime::currentDateTime();
+
+    if (m_paused) {
+        m_pausedTime = now;
+        ui.buttonPause->setText( "Unpause" );
+    } else {
+        m_times.last().pausedSecs += m_pausedTime.secsTo(now);
+        m_pausedTime = QDateTime();
+
+        QStandardItemModel* model = dynamic_cast<QStandardItemModel*>(ui.tableView->model());
+        if (model != nullptr) {
+            QStandardItem* item = model->item(m_times.count() - 1, 5);
+            if (item != nullptr) {
+                item->setText(QString("%1").arg(m_times.last().pausedSecs));
+            }
+        }
+
+        updateTimeLeft();   // update m_leaveTime
+        setBlueAndBoldText( ui.labelLeaveTime, leaveTimeWithDelays().time().toString( "hh:mm AP" ) );
+        setBlackAndBoldText( ui.labelLeaveTimeWithOvertime, leaveTimeWithOvertime().time().toString( "(hh:mm AP)" ) );
+
+        ui.buttonPause->setText( "Pause" );
+    }
 }
 
 void TimeKeeper::setBlueAndBoldText( QLabel* label, const QString& text )
@@ -300,8 +362,17 @@ void TimeKeeper::setBigRedAndBoldText( QLabel* label, const QString& text )
 
 void TimeKeeper::updateTimeLeft()
 {
-	QDateTime now = QDateTime::currentDateTime();
-	qint64 secsTotal = now.secsTo( leaveTimeWithOvertime() );
+    QDateTime now = QDateTime::currentDateTime();
+
+    m_leaveTime = m_times.last().clockInTime
+            .addSecs( 8 * 60 * 60 + 30 * 60 )
+            .addSecs(m_times.last().pausedSecs);
+
+    if (m_paused) {
+        m_leaveTime = m_leaveTime.addSecs(m_pausedTime.secsTo(now));
+    }
+
+    qint64 secsTotal = now.secsTo( leaveTimeWithOvertime() );
 	bool negative = false;
 
 	if( secsTotal < 0 )

@@ -13,14 +13,17 @@ class QStandardItem;
 
 struct WorkTime
 {
-	WorkTime() : clockInDelay( 2 )
-			   , clockOutDelay( 1 )
+    WorkTime()
+        : clockInDelay( 1 )
+        , clockOutDelay( 1 )
+        , pausedSecs( 0 )
 	{
 	}
 	QDateTime	clockInTime;
 	quint8		clockInDelay;
 	QDateTime	clockOutTime;
 	quint8		clockOutDelay;
+    qint64      pausedSecs;
 };
 
 class TimeKeeper : public QDialog
@@ -35,6 +38,7 @@ public slots:
 	void storeTimes();
 	void updateTimeLeft();
     void updateEverything( QStandardItem* item );
+    void togglePause();
 
 private:
     QString appDataPath() const;
@@ -55,6 +59,8 @@ private:
 	QVector<WorkTime>	m_times;
 	QDateTime			m_leaveTime;
 	QTimer				m_timer;
+    bool                m_paused;
+    QDateTime           m_pausedTime;
 };
 
 #endif // TIMEKEEPER_H
